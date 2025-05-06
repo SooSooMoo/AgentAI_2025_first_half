@@ -1,0 +1,107 @@
+# ライブラリのインストール（必要な場合）
+!pip install --quiet langchain openai duckduckgo-search ipywidgets
+!pip install langchain_community
+
+# インポート
+import os
+import ipywidgets as widgets
+from IPython.display import display, clear_output
+from langchain.chat_models import ChatOpenAI
+from langchain.agents import initialize_agent, Tool
+from langchain.utilities import DuckDuckGoSearchAPIWrapper
+from google.colab import userdata
+
+# OpenAI APIキーの設定
+os.environ["OPENAI_API_KEY"] = "あなたのOpenAI_APIキー"
+#os.environ["OPENAI_API_KEY"] = userdata.get("OPENAI_API_KEY")
+
+# LLM初期化
+llm = ChatOpenAI(
+    model="gpt-3.5-turbo",
+    #model="gpt-4",  # または "gpt-3.5-turbo"
+    temperature=0.7,
+    max_tokens=1500,
+)
+
+# DuckDuckGo検索の設定
+search = DuckDuckGoSearchAPIWrapper()
+
+search_tool = Tool(
+    name="Search",
+    func=search.run,
+    description="試合情報や旅行情報を調べるためのWeb検索ツール"
+)
+
+# エージェント構築
+agent = initialize_agent(
+    tools=[search_tool],
+    llm=llm,
+    agent="chat-zero-shot-react-description",
+    verbose=False,
+)
+
+# --- ユーザインタフェース構築 ---
+
+# 入力ウィジェット
+sport_input = widgets.Text(
+    value='サッカー',
+    placeholder='例: サッカー, 野球, F1',
+    description='観戦対象:',
+    style={'description_width': 'initial'},
+    layout=widgets.Layout(width='400px')
+)
+
+country_input = widgets.Text(
+    value='スペイン',
+    placeholder='例: スペイン, アメリカ, イタリア',
+    description='旅行先:',
+    style={'description_width': 'initial'},
+    layout=widgets.Layout(width='400px')
+)
+
+generate_button = widgets.Button(
+    description='旅行プランを作成',
+    button_style='success'
+)
+
+output_area = widgets.Output()
+
+# ボタン押下時の処理
+def generate_plan(b):
+    with output_area:
+        clear_output()
+        sport = sport_input.value
+        country = country_input.value
+
+        if not sport or not country:
+            print("観戦対象と旅行先の両方を入力してください。")
+            return
+
+        prompt = f"""
+あなたはプロの旅行プランナーです。
+
+【タスク】
+・{sport}観戦と{country}への海外旅行プランを作成してください。
+・以下の要件を満たしてください：
+
+【要件】
+- 回答はすべて日本語で記述してください。
+- 5日間の旅行プランを、日ごとに分けて提示してください（Day1〜Day5など）。
+- 各日ごとに「午前」「午後」「夜」に分けた行動予定を書いてください。
+- 訪問地の簡単な説明や食事のおすすめ、移動方法にも言及してください。
+- 試合観戦日は明確にし、試合会場と時間も記載してください（わかる範囲で）。
+- DuckDuckGo検索ツールを用いて、現地の試合日や開催都市を調べてください。
+- 1人あたりの概算費用（航空券、ホテル、観戦チケット込み）も提示してください。
+"""
+
+        print("旅行プランを作成中です。しばらくお待ちください...\n")
+        result = agent.run(prompt)
+        print("完了しました.\n")
+        print(result)
+
+# ボタンと関数の紐付け
+generate_button.on_click(generate_plan)
+
+# UIの表示
+display(widgets.VBox([sport_input, country_input, generate_button, output_area]))
+
